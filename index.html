@@ -129,7 +129,12 @@ textarea{resize:vertical;min-height:60px;}
 .big-save-btn{width:100%;padding:14px;background:#222;color:#fff;border:none;border-radius:12px;
   font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px;}
 .big-save-btn:hover{background:#111;}
+
+.cat-card{display:flex;flex-direction:column;align-items:center;text-align:center;padding:8px!important;width:calc(33.33% - 6px)!important;}
+.cat-card img{border-radius:6px;margin-bottom:6px;}
+#catBtns{gap:8px;}
 </style>
+<script src="https://js.tosspayments.com/v1/payment"></script>
 </head>
 <body>
 
@@ -209,8 +214,12 @@ textarea{resize:vertical;min-height:60px;}
     <div class="field"><label>요청사항 (선택)</label><textarea id="memo" placeholder="배송 요청사항, 손질 방법 등"></textarea></div>
   </div>
 
-  <button class="submit-btn" onclick="submitOrder()">주문 접수하기</button>
-  <p class="notice">주문 접수 후 담당자가 입금 안내 연락드립니다</p>
+  <div style="display:flex;gap:10px;margin-bottom:8px;">
+    <button class="submit-btn" onclick="submitOrder('카드')" style="background:#c0392b;">💳 카드결제</button>
+    <button class="submit-btn" onclick="submitOrder('계좌이체')" style="background:#2c3e50;">🏦 계좌이체</button>
+  </div>
+  <button class="submit-btn" onclick="submitOrder('무통장입금')" style="background:#888;margin-bottom:8px;">📋 무통장입금</button>
+  <p class="notice">주문 접수 후 담당자가 확인 후 발송해드립니다</p>
 
   <!-- 사업자 정보 -->
   <div style="margin-top:32px;padding:16px;background:#f9f9f9;border-radius:12px;border:1px solid #eee;">
@@ -506,11 +515,28 @@ function renderCatBtns(){
   wrap.innerHTML = '';
   const activeCats = CATS;
   const emojiMap = {돼지고기:'🐷',소고기:'🐄',양고기:'🐑',염소:'🐐',가공품:'🥩'};
-  activeCats.forEach(cat=>{
+  const imgMap = {
+    돼지고기:'https://dongbumt.github.io/cafe-order/images/pork.jpg',
+    소고기:'https://dongbumt.github.io/cafe-order/images/beef.jpg',
+    양고기:'https://dongbumt.github.io/cafe-order/images/lamb.jpg',
+    염소:'https://dongbumt.github.io/cafe-order/images/goat.jpg',
+    가공품:'https://dongbumt.github.io/cafe-order/images/processed.jpg'
+  };
+  activeCats.forEach(function(cat){
     const b = document.createElement('button');
-    b.className = 'btn-opt';
-    b.textContent = emojiMap[cat]+' '+cat;
-    b.onclick = ()=>selectCategory(cat, b);
+    b.className = 'btn-opt cat-card';
+    const imgEl = document.createElement('img');
+    imgEl.src = imgMap[cat];
+    imgEl.alt = cat;
+    imgEl.style.cssText = 'width:100%;height:80px;object-fit:cover;border-radius:6px;margin-bottom:6px;display:block;';
+    imgEl.onerror = function(){ this.remove(); };
+    const txt = document.createElement('div');
+    txt.style.cssText = 'font-size:13px;font-weight:700;';
+    txt.textContent = emojiMap[cat] + ' ' + cat;
+    b.appendChild(imgEl);
+    b.appendChild(txt);
+    b.style.cssText = 'padding:8px;width:calc(33.33% - 6px);flex-direction:column;align-items:center;text-align:center;';
+    b.onclick = function(){ selectCategory(cat, b); };
     wrap.appendChild(b);
   });
 }
@@ -678,7 +704,9 @@ function resetBuilder(){
 
 
 
-async function submitOrder(){
+const TOSS_CLIENT_KEY = 'test_ck_ALnQvDd2VJqeNyen7APP3Mj7X41m';
+
+async function submitOrder(payMethod){
   const name=document.getElementById('name').value.trim();
   const phone=document.getElementById('phone').value.trim();
   const address=document.getElementById('address').value.trim();
@@ -691,27 +719,76 @@ async function submitOrder(){
   const delivery = subtotal >= 100000 ? 0 : 4000;
   const total = subtotal + delivery;
   const itemsText=cart.map(i=>`${i.cat}/${i.name}(${i.origin},${i.storage})/${i.use}/${i.weight}×${i.qty}개`).join(' | ');
-  const payload={action:'saveOrder',name,phone,address,depositor,cafeNick,source:'카페',items:itemsText,memo,subtotal,delivery,total,timestamp:new Date().toLocaleString('ko-KR')};
-  try{
-    await fetch(SHEET_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-  }catch(e){}
-  const totalStr = total > 0 ? `<br><br>결제금액: <b>${total.toLocaleString()}원</b> (택배비 ${delivery===0?'무료':delivery.toLocaleString()+'원 포함'})` : '';
-  showPage('successPage');
-  document.getElementById('successMsg').innerHTML=`
-    <b>${name}</b>님의 주문이 접수되었습니다.${totalStr}
-    <div style="margin:20px 0;background:#f8f9fa;border-radius:12px;padding:18px 20px;text-align:left;">
-      <div style="font-size:13px;color:#888;margin-bottom:8px;font-weight:600;">입금 계좌 정보</div>
-      <div style="font-size:16px;font-weight:700;margin-bottom:6px;">🏦 기업은행</div>
-      <div style="font-size:18px;font-weight:700;letter-spacing:1px;color:#c0392b;margin-bottom:4px;">115-077399-01-059</div>
-      <div style="font-size:14px;color:#444;">예금주 : (주)동부축산유통</div>
-    </div>
-    <div style="font-size:13px;color:#666;margin-bottom:20px;line-height:1.8;">
-      위 계좌로 입금해 주시면 확인 후 발송됩니다.
-    </div>
-    <a href="https://cafe.daum.net/wjsxhddmatlr2/JMNT" target="_blank"
-      style="display:inline-block;padding:13px 28px;background:#3d2314;color:#fff;border-radius:10px;font-size:15px;font-weight:700;text-decoration:none;">
-      ← 전통음식만들기 카페로 돌아가기
-    </a>`;
+  const payload={action:'saveOrder',name,phone,address,depositor,cafeNick,source:'카페',items:itemsText,memo,subtotal,delivery,total,payMethod,timestamp:new Date().toLocaleString('ko-KR')};
+
+  // 무통장입금은 기존 방식 유지
+  if(payMethod === '무통장입금' || total === 0){
+    try{ await fetch(SHEET_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); }catch(e){}
+    const totalStr = total > 0 ? `<br><br>결제금액: <b>${total.toLocaleString()}원</b> (택배비 ${delivery===0?'무료':delivery.toLocaleString()+'원 포함'})` : '';
+    showPage('successPage');
+    document.getElementById('successMsg').innerHTML=`
+      <b>${name}</b>님의 주문이 접수되었습니다.${totalStr}
+      <div style="margin:20px 0;background:#f8f9fa;border-radius:12px;padding:18px 20px;text-align:left;">
+        <div style="font-size:13px;color:#888;margin-bottom:8px;font-weight:600;">입금 계좌 정보</div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:6px;">🏦 기업은행</div>
+        <div style="font-size:18px;font-weight:700;letter-spacing:1px;color:#c0392b;margin-bottom:4px;">115-077399-01-059</div>
+        <div style="font-size:14px;color:#444;">예금주 : (주)동부축산유통</div>
+      </div>
+      <div style="font-size:13px;color:#666;margin-bottom:20px;line-height:1.8;">
+        위 계좌로 입금해 주시면 확인 후 발송됩니다.
+      </div>
+      <a href="https://cafe.daum.net/wjsxhddmatlr2/JMNT" target="_blank"
+        style="display:inline-block;padding:13px 28px;background:#3d2314;color:#fff;border-radius:10px;font-size:15px;font-weight:700;text-decoration:none;">
+        ← 전통음식만들기 카페로 돌아가기
+      </a>`;
+    return;
+  }
+
+  // 카드결제 / 계좌이체 → 토스페이먼츠 결제창 호출
+  if(total <= 0){ alert('단가가 설정되지 않은 상품이 있어 카드결제를 진행할 수 없습니다.\n무통장입금을 이용해 주세요.'); return; }
+
+  // 주문 먼저 시트에 저장 (결제 전)
+  try{ await fetch(SHEET_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); }catch(e){}
+
+  const orderId = 'DONGBU-' + Date.now();
+  const toss = TossPayments(TOSS_CLIENT_KEY);
+  const orderName = cart.length > 1 ? cart[0].name + ' 외 ' + (cart.length-1) + '건' : cart[0].name;
+  const methodMap = {'카드':'카드', '계좌이체':'계좌이체'};
+
+  toss.requestPayment(methodMap[payMethod], {
+    amount: total,
+    orderId: orderId,
+    orderName: orderName,
+    customerName: name,
+    customerEmail: '',
+    successUrl: window.location.href + '?success=1&orderId=' + orderId,
+    failUrl: window.location.href + '?fail=1',
+  }).catch(err => {
+    if(err.code !== 'USER_CANCEL'){
+      alert('결제 오류: ' + err.message);
+    }
+  });
+}
+
+// 결제 완료 후 URL 파라미터 처리
+function checkPaymentResult(){
+  const params = new URLSearchParams(window.location.search);
+  if(params.get('success')){
+    showPage('successPage');
+    document.getElementById('successMsg').innerHTML=`
+      <b>결제가 완료되었습니다!</b><br><br>
+      주문번호: ${params.get('orderId') || ''}<br><br>
+      <div style="font-size:13px;color:#666;margin-top:12px;line-height:1.8;">
+        확인 후 빠르게 발송해드리겠습니다. 감사합니다 🙏
+      </div>
+      <a href="https://cafe.daum.net/wjsxhddmatlr2/JMNT" target="_blank"
+        style="display:inline-block;margin-top:20px;padding:13px 28px;background:#3d2314;color:#fff;border-radius:10px;font-size:15px;font-weight:700;text-decoration:none;">
+        ← 전통음식만들기 카페로 돌아가기
+      </a>`;
+  } else if(params.get('fail')){
+    alert('결제가 취소되었습니다. 다시 시도해 주세요.');
+    history.replaceState({}, '', window.location.pathname);
+  }
 }
 
 /* ══ 관리자 렌더링 ══ */
@@ -1019,6 +1096,7 @@ function autoFillFromNick(nick) {
 /* ══ 초기화 ══ */
 loadData();
 loadSaleItems();
+checkPaymentResult();
 </script>
 </body>
 </html>
